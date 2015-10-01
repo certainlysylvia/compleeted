@@ -1,20 +1,32 @@
 <?php
-namespace Compleet\Support;
+	namespace Compleeted\Support;
 
-class Ary {
+	class Ary
+	{
+		/**
+		 *
+		 * Flatten a multi-dimensional array into a single level.
+		 *
+		 * @param  array $ary
+		 *
+		 * @return array
+		 *
+		 */
+		public static function flatten( $ary )
+		{
+			$output = [ ];
 
-  /**
-   * Flatten a multi-dimensional array into a single level.
-   *
-   * @param  array  $ary
-   * @return array
-   */
-  public static function flatten($ary) {
-    $output = [];
+			array_walk_recursive(
+				$ary,
+				function ( $v ) use
+				(
+					&$output
+				)
+				{
+					$output[] = $v;
+				}
+			);
 
-    array_walk_recursive($ary, function($v) use (&$output) { $output[] = $v; });
-
-    return $output;
-  }
-
-}
+			return $output;
+		}
+	}

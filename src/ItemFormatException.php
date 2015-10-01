@@ -1,4 +1,8 @@
 <?php
-namespace Compleet;
+	namespace Compleeted;
 
-class ItemFormatException extends \RuntimeException {}
+	class ItemFormatException
+		extends
+		\RuntimeException
+	{
+	}

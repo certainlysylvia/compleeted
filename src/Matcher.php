@@ -1,51 +1,115 @@
 <?php
-namespace Compleet;
+	namespace Compleeted;
 
-use Compleet\Support\Str;
+	use Compleeted\Support\Str;
 
-class Matcher extends Base {
+	class Matcher
+		extends
+		Base
+	{
+		/**
+		 *
+		 * Matches the given term against the indexed data in the Redis database.
+		 *
+		 * @param   string $term
+		 * @param   array  $options
+		 *
+		 * @return  array
+		 *
+		 */
+		public function matches(
+			$term,
+			$options = [ ]
+		) {
+			$words = array_filter(
+				explode(
+					' ',
+					Str::normalize( $term )
+				),
+				function ( $w )
+				{
+					return ( Str::size( $w ) >= $this->getMinComplete() && ! in_array(
+							$w,
+							$this->getStopWords()
+						) );
+				}
+			);
 
-  /**
-   * Matches the given term against the indexed data in the Redis database.
-   *
-   * @param   string  $term
-   * @param   array   $options
-   * @return  array
-   */
-  public function matches($term, $options = array()) {
-    $words = array_filter(explode(' ', Str::normalize($term)), function($w) {
-      return (Str::size($w) >= $this->getMinComplete() && !in_array($w, $this->getStopWords()));
-    });
+			sort( $words );
 
-    sort($words);
+			if ( empty( $words ) ) return [ ];
 
-    if ( empty($words) ) return [];
+			$limit = isset( $options[ 'limit' ] ) ? $options[ 'limit' ] : 5;
 
-    $limit = isset($options['limit']) ? $options['limit'] : 5;
+			$cache = isset( $options[ 'cache' ] ) ? $options[ 'cache' ] : TRUE;
 
-    $cache = isset($options['cache']) ? $options['cache'] : true;
+			$cacheExpiry = isset( $options[ 'expiry' ] ) ? $options[ 'expiry' ] : 600;
 
-    $cacheExpiry = isset($options['expiry']) ? $options['expiry'] : 600;
+			$cacheKey = $this->getCachePrefix() . ':' . implode(
+					'|',
+					$words
+				);
 
-    $cacheKey = $this->getCachePrefix() . ':' . implode('|', $words);
+			if (
+				! $cache
+				||
+				! $this->redis()
+					   ->exists( $cacheKey )
+			)
+			{
+				$interKeys = array_map(
+					function ( $w )
+					{
+						return "{$this->getIndexPrefix()}:{$w}";
+					},
+					$words
+				);
 
-    if ( !$cache || !$this->redis()->exists($cacheKey) || $this->redis()->exists($cacheKey) == 0 ) {
-      $interKeys = array_map(function($w) {
-        return "{$this->getIndexPrefix()}:{$w}"; }, $words);
+				$this->redis()
+					 ->zinter(
+						 $cacheKey,
+						 $interKeys
+					 );
+				$this->redis()
+					 ->expire(
+						 $cacheKey,
+						 $cacheExpiry
+					 );
+			}
 
-      $this->redis()->zinterstore($cacheKey, $interKeys);
-      $this->redis()->expire($cacheKey, $cacheExpiry);
-    }
+			$ids = $this->redis()
+						->zrevrange(
+							$cacheKey,
+							0,
+							$limit - 1
+						);
 
-    $ids = $this->redis()->zrevrange($cacheKey, 0, $limit - 1);
+			if ( count( $ids ) === 0 ) return [ ];
 
-    if ( count($ids) === 0 ) return [];
+			$results = $this->redis()
+							->hmget(
+								$this->getDataPrefix(),
+								$ids
+							);
 
-    $results = $this->redis()->hmget($this->getDataPrefix(), $ids);
-    $results = array_filter($results, function($res) { return !is_null($res); });
+			$results = array_filter(
+				$results,
+				function ( $res )
+				{
+					return ! is_null( $res );
+				}
+			);
 
-    return array_map(function($res) {
-      return json_decode($res, true); }, $results);
-  }
+			return array_map(
+				function ( $res )
+				{
+					return json_decode(
+						$res,
+						TRUE
+					);
+				},
+				$results
+			);
+		}
 
-}
+	}

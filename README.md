@@ -1,37 +1,22 @@
-# Compleet
+# Compleeted
 
-[![Latest Stable Version](https://poser.pugx.org/etrepat/compleet/v/stable.svg)](https://packagist.org/packages/etrepat/compleet)
-[![Total Downloads](https://poser.pugx.org/etrepat/compleet/downloads.svg)](https://packagist.org/packages/etrepat/compleet)
-[![License](https://poser.pugx.org/etrepat/compleet/license.svg)](https://packagist.org/packages/etrepat/compleet)
-[![Build Status](https://travis-ci.org/etrepat/compleet.svg?branch=master)](https://travis-ci.org/etrepat/compleet)
+A bc breaking fork of [Compleet](https://github.com/etrepat/compleet), itself a PHP port of the awesome [Soulmate](https://github.com/seatgeek/soulmate) ruby gem, which was written by Eric Waller. All credit should go to the original library author and a mention to the author of the PHP derivative.
 
-Compleet is a PHP port of the awesome [Soulmate](https://github.com/seatgeek/soulmate) ruby gem, which was written by Eric Waller. All credit should go to the original library author.
+This library will help you solve the common problem of developing a fast autocomplete feature. It uses Redis's sorted sets to build an index of partially completed words and the corresponding top matching items, and provides a simple interface to query them. Compleeted finishes your sentences.
 
-This library will help you solve the common problem of developing a fast autocomplete feature. It uses Redis's sorted sets to build an index of partially completed words and the corresponding top matching items, and provides a simple interface to query them. Compleet finishes your sentences.
-
-Compleet requires [PHP](http://www.php.net) >= 5.4 (or [HHVM](http://www.hhvm.com) >= 3.2) and its only dependencies are [Composer](http://getcomposer.org) itself and the fantastic [Predis](https://github.com/nrk/predis/) PHP client library for Redis.
+Compleeted requires [PHP](http://www.php.net) >= 5.6 and its only dependency is [Phpredis](https://github.com/phpredis/phpredis) PHP extension for Redis.
 
 ## Getting Started
 
-Compleet is distributed as a composer package, so kick things off by adding it as a requirement to your `composer.json` file:
-
-```json
-{
-  "require": {
-    "etrepat/compleet": "~1.0"
-  }
-}
-```
-
-Then update your packages by running `composer update` or install with `composer install`.
+Compleeted is distributed standalone, so just copy the files to a preferred location and access them using namespacing etc as per usual.
 
 ## Usage
 
-Compleet is designed to be simple and fast, and its main features are:
+Compleeted is designed to be simple and fast, and its main features are:
 
 * Provide suggestions for multiple types of items in a single query.
-* Sort results by user-specified score, lexycographically otherwise.
-* Store arbitrary metadata for each item. You may store url's, thumbail paths, etc.
+* Sort results by user-specified score, lexicographically otherwise.
+* Store arbitrary metadata for each item. You may store url's, thumbnail paths, etc.
 
 An *item* is a simple JSON object that looks like:
 
@@ -51,34 +36,57 @@ Where `id` is a unique identifier (within the specific type), `term` is the phra
 
 ### Managing items
 
-Before being able to perform any autocomplete search we must first load some data into our redis database. To feed data into a Redis server instance for later querying, Compleet provides the `Loader` class:
+Before being able to perform any autocomplete search we must first load some data into our redis database. To feed data into a Redis server instance for later querying, Compleeted provides the `Loader` class:
 
 ```php
-require __DIR__ . '/vendor/autoload.php';
+// I assume you have a PSR suitable autoloader. If not add includes to the files as required (the 'use' list in each is a clue) 
+namespace yournamespace;
 
-$loader = new Compleet\Loader('venues');
+use Compleeted\Loader;
+
+$loader = new Loader('venues');
 ```
 
-The constructor parameter is the type of the items we are actually going to add/remove or load. We'll later use this same type for search. This is used so we can add several kinds of completeley differentiated data and index it into Redis separately.
+The constructor parameter is the type of the items we are actually going to add/remove or load. We'll later use this same type for search. This is used so we can add several kinds of completely differentiated data and index it into Redis separately.
 
-By default a `Compleet\Loader` object will instatiate a connection to a local redis instance as soon as it is needed. If you wish to change this behaviour, you may either provide a connection into the constructor:
+By default a `Compleeted\Loader` object will instantiate a connection to a local redis instance as soon as it is needed. If you wish to change this behaviour, you may either provide a connection into the constructor:
 
 ```php
-require __DIR__ . '/vendor/autoload.php';
+// I assume you have a PSR suitable autoloader. If not add includes to the files as required (the 'use' list in each is a clue) 
+namespace yournamespace;
 
-$redis = new Predis\Client('tcp://127.0.0.1/6379?database=0');
+use Compleeted\Loader;
 
-$loader = new Compleet\Loader('venues', $redis);
+$redis = new Redis();
+
+$redis->pconnect(
+  '127.0.0.1',
+  6379
+);
+
+$redis->select(0);
+
+$loader = new Compleeted\Loader('venues', $redis);
 ```
 
 or use the `setConnection` method:
 
 ```php
-require __DIR__ . '/vendor/autoload.php';
+// I assume you have a PSR suitable autoloader. If not add includes to the files as required (the 'use' list in each is a clue) 
+namespace yournamespace;
 
-$redis = new Predis\Client('tcp://127.0.0.1/6379?database=0');
+use Compleeted\Loader;
 
-$loader = new Compleet\Loader('venues');
+$redis = new Redis();
+
+$redis->pconnect(
+  '127.0.0.1',
+  6379
+);
+
+$redis->select(0);
+
+$loader = new Compleeted\Loader('venues');
 $loader->setConnection($redis);
 ```
 
@@ -168,17 +176,30 @@ $loader->clear();
 
 ### Querying
 
-Analogous to the `Compleet\Loader` class, Compleet provides the `Matcher` class which will allow us to query against previously indexed data. It works pretty similarly and accepts the same constructor arguments:
+Analogous to the `Compleeted\Loader` class, Compleeted provides the `Matcher` class which will allow us to query against previously indexed data. It works pretty similarly and accepts the same constructor arguments:
 
 ```php
-require __DIR__ . '/vendor/autoload.php';
+// I assume you have a PSR suitable autoloader. If not add includes to the files as required (the 'use' list in each is a clue) 
+namespace yournamespace;
 
-$redis = new Predis\Client('tcp://127.0.0.1/6379?database=0');
+namespace yournamespace;
 
-$matcher = new Compleet\Matcher('venues', $redis);
+use Compleeted\Matcher;
+
+$redis = new Redis();
+
+$redis->pconnect(
+  '127.0.0.1',
+  6379
+);
+
+$redis->select(0);
+
+
+$matcher = new Compleeted\Matcher('venues', $redis);
 // or:
-//  $matcher = new Compleet\Matcher('venues');
-//  $matcher->setConnection($redis);
+$matcher = new Compleeted\Matcher('venues');
+$matcher->setConnection($redis);
 ```
 
 Again, the first constructor parameter is the type of the items we are actually going query against.
@@ -218,59 +239,24 @@ $types = array('products', 'categories', 'brands');
 $results = array();
 
 foreach($types as $type) {
-  $matcher = new Compleet\Matcher($type);
+  $matcher = new Matcher($type);
   $results[$type] = $matcher->matches('some term');
 }
 ```
 
 ## Working with the CLI
 
-Compleet also provides a CLI utility, the `compleet` script, for easy data indexing from JSON documents/files. It may also be used to conduct queries for testing purposes. Like many composer packages which supply a binary, it will probably be placed under the `vendor/bin` folder of your project.
+Compleeted does not support te CLI, as Compleet does - haven't a need myself and not gotten to it.
 
-To load data into redis from the CLI, you can pipe items from a JSON file into the `compleet load TYPE` command.
+## Using Compleeted with your framework
 
-Here's a sample `venues.json` (one JSON item per line):
-
-```json
-{"id":1,"term":"Dodger Stadium","score":85,"data":{"url":"\/dodger-stadium-tickets\/","subtitle":"Los Angeles, CA"}}
-{"id":28,"term":"Angel Stadium","score":85,"data":{"url":"\/angel-stadium-tickets\/","subtitle":"Anaheim, CA"}}
-{"id":30,"term":"Chase Field ","score":85,"data":{"url":"\/chase-field-tickets\/","subtitle":"Phoenix, AZ"}}
-{"id":29,"term":"Sun Life Stadium","score":84,"data":{"url":"\/sun-life-stadium-tickets\/","subtitle":"Miami, FL"}}
-{"id":2,"term":"Turner Field","score":83,"data":{"url":"\/turner-field-tickets\/","subtitle":"Atlanta, GA"}}
-```
-
-And here's the load command (The `compleet` utility will assume redis is running locally on the default port, or you can specify a redis connection string with the `--redis` argument):
-
-    $ vendor/bin/compleet load venues < venues.json
-
-Running `compleet -h` will list all the operations which are supported by the CLI and its arguments. All operations that may be performed programatically can be run from the `compleet` utility.
-
-## Using Compleet with your framework
-
-Compleet is a standalone composer package and should work out of the box regardless of the PHP framework you use. In fact, none is needed.
-
-### Using Compleet with Laravel
-
-A Compleet integration for [Laravel](http://www.laravel.com) >= 4.2 is provided in the [Laravel Compleet](https://github.com/etrepat/laravel-compleet.git) package. It will help reduce the amount of boilerplate code needed to make the autocomplete functionality in your project useful and adds several nice integrations such as: global config, artisan commands, redis connection reuse, controller code, routes, etc.
-
-Take a look at the [Laravel Compleet](https://github.com/etrepat/laravel-compleet.git) project page for more information on how to use Compleet with your [Laravel](http://www.laravel.com) applications.
-
-## Contributing
-
-Thinking of contributing? Maybe you've found some nasty bug? That's great news!
-
-1. Fork & clone the project: `git clone git@github.com:your-username/compleet.git`.
-2. Run the tests and make sure that they pass with your setup: `phpunit`.
-3. Create your bugfix/feature branch and code away your changes. Add tests for your changes.
-4. Make sure all the tests still pass: `phpunit`.
-5. Push to your fork and submit new a pull request.
+Compleeted is a standalone package and should work out of the box regardless of the PHP framework you use. In fact, none is needed.
 
 ## License
 
-Compleet is licensed under the terms of the [MIT License](http://opensource.org/licenses/MIT)
+Compleeted is licensed under the terms of the [MIT License](http://opensource.org/licenses/MIT)
 (See LICENSE file for details).
 
 ---
 
-Coded by [Estanislau Trepat (etrepat)](http://etrepat.com). I'm also
-[@etrepat](http://twitter.com/etrepat) on twitter.
+Conversion Coded by [Kate Sylvia (katesylvia)](katesylvia@code-cubed.com).

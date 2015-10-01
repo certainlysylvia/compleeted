@@ -1,137 +1,257 @@
 <?php
-namespace Compleet;
+	namespace Compleeted;
 
-use Compleet\Support\Str;
+	use Compleeted\Support\Str;
+	use Redis;
 
-class Loader extends Base {
+	class Loader
+		extends
+		Base
+	{
 
-  /**
-   * Loads supplied items array into Redis.
-   *
-   * @param   array $items
-   * @return  array
-   */
-  public function load(array $items) {
-    // Clear all the sorted sets and data store for the current type
-    $this->clear();
+		/**
+		 *
+		 * Loads supplied items array into Redis.
+		 *
+		 * @param   array $items
+		 *
+		 * @return  array
+		 *
+		 */
+		public function load( array $items )
+		{
+			// Clear all the sorted sets and data store for the current type
+			$this->clear();
 
-    // Redis can continue serving cached requests for this type while the reload is
-    // occuring. Some requests may be cached incorrectly as empty set (for requests
-    // which come in after the above delete, but before the loading completes). But
-    // everything will work itself out as soon as the cache expires again.
-    foreach($items as $item) $this->add($item, true);
+			// Redis can continue serving cached requests for this type while the reload is
+			// occurring. Some requests may be cached incorrectly as empty set (for requests
+			// which come in after the above delete, but before the loading completes). But
+			// everything will work itself out as soon as the cache expires again.
+			foreach ( $items as $item )
+			{
+				$this->add(
+					$item,
+					TRUE
+				);
+			}
 
-    return $items;
-  }
+			return $items;
+		}
 
-  /**
-   * Clear redis indexed item data.
-   *
-   * @return void
-   */
-  public function clear() {
-    // Delete the sorted sets for the current type
-    $phrases = $this->redis()->smembers($this->getIndexPrefix());
+		/**
+		 *
+		 * Clear redis indexed item data.
+		 *
+		 * @return void
+		 *
+		 */
+		public function clear()
+		{
+			// Delete the sorted sets for the current type
+			$phrases = $this->redis()
+							->smembers( $this->getIndexPrefix() );
 
-    $this->redis()->pipeline(function($pipe) use ($phrases) {
-      foreach($phrases as $p) $pipe->del("{$this->getIndexPrefix()}:{$p}");
-      $pipe->del($this->getIndexPrefix());
-    });
+			foreach ( $phrases as &$p )
+			{
+				$p = "{$this->getIndexPrefix()}:{$p}";
+			}
 
-    // Delete the data stored for this type
-    $this->redis()->del($this->getDataPrefix());
-  }
+			unset( $p );
 
-  /**
-   * Adds a single item into Redis.
-   *
-   * @param   array   $item
-   * @param   bool    $skipDuplicateChecks
-   * @return  void
-   */
-  public function add(array $item, $skipDuplicateChecks = false) {
-    if ( !(array_key_exists('id', $item) && array_key_exists('term', $item)) )
-      throw new ItemFormatException('Items must at least specify both an id and a term.');
+			$phrases[] = $this->getIndexPrefix();
 
-    // Set default options for item array
-    $item = array_merge(['score' => 0], $item);
+			/** @noinspection PhpMethodParametersCountMismatchInspection */
+			/** @noinspection PhpInternalEntityUsedInspection */
+			$this->redis()
+				 ->multi(
+					 Redis::PIPELINE
+				 );
 
-    // kill any old items with this id if needed
-    if ( !$skipDuplicateChecks ) $this->remove(['id' => $item['id']]);
+			$this->redis()
+				 ->del( $phrases );
 
-    $this->redis()->pipeline(function($pipe) use ($item) {
-      // store the raw data in a separate key to reduce memory usage
-      $pipe->hset($this->getDataPrefix(), $item['id'], json_encode($item));
+			// Delete the data stored for this type
+			$this->redis()
+				 ->del( $this->getDataPrefix() );
 
-      $prefixes = $this->prefixes($item);
-      if ( count($prefixes) > 0 ) {
-        foreach($prefixes as $p) {
-          // remember this prefix in a master set
-          $pipe->sadd($this->getIndexPrefix(), $p);
+			$this->redis()
+				 ->exec();
+		}
 
-          // store the id of this term in the index
-          $pipe->zadd("{$this->getIndexPrefix()}:{$p}", $item['score'], $item['id']);
-        }
-      }
-    });
-  }
+		/**
+		 *
+		 * Adds a single item into Redis.
+		 *
+		 * @param   array $item
+		 * @param   bool  $skipDuplicateChecks
+		 *
+		 * @return  void
+		 *
+		 */
+		public function add(
+			array $item,
+			$skipDuplicateChecks = FALSE
+		) {
+			if ( ! ( array_key_exists(
+					'id',
+					$item
+				) && array_key_exists(
+					'term',
+					$item
+				) )
+			)
+				throw new ItemFormatException( 'Items must at least specify both an id and a term.' );
 
-  /**
-   * Removes the supplied item from Redis.
-   * It only cares about an item's id, but for consistency takes an array
-   *
-   * @param   array $item
-   * @return  void
-   */
-  public function remove(array $item) {
-    $stored = $this->redis()->hget($this->getDataPrefix(), $item['id']);
+			// Set default options for item array
+			$item = array_merge(
+				[ 'score' => 0 ],
+				$item
+			);
 
-    if ( is_null($stored) ) return;
+			// kill any old items with this id if needed
+			if ( ! $skipDuplicateChecks ) $this->remove( [ 'id' => $item[ 'id' ] ] );
 
-    $item = json_decode($stored, true);
+			/** @noinspection PhpMethodParametersCountMismatchInspection */
+			/** @noinspection PhpInternalEntityUsedInspection */
+			$this->redis()
+				 ->multi(
+					 Redis::PIPELINE
+				 );
 
-    // undo the add operations
-    $this->redis()->pipeline(function($pipe) use ($item) {
-      $pipe->hdel($this->getDataPrefix(), $item['id']);
+			// store the raw data in a separate key to reduce memory usage
+			$this->redis()->hset(
+				$this->getDataPrefix(),
+				$item[ 'id' ],
+				json_encode( $item )
+			);
 
-      $prefixes = $this->prefixes($item);
-      if ( count($prefixes) > 0 ) {
-        foreach($prefixes as $p) {
-          // remove from master set
-          $pipe->srem($this->getIndexPrefix(), $p);
+			$prefixes = $this->prefixes( $item );
+			if ( count( $prefixes ) > 0 )
+			{
+				$this->redis()->sadd(
+					$this->getIndexPrefix(),
+					...$prefixes
+				);
 
-          // remove from the index
-          $pipe->zrem("{$this->getIndexPrefix()}:{$p}", $item['id']);
-        }
-      }
-    });
-  }
+				foreach ( $prefixes as $p )
+				{
+					// store the id of this term in the index
+					$this->redis()->zadd(
+						"{$this->getIndexPrefix()}:{$p}",
+						$item[ 'score' ],
+						$item[ 'id' ]
+					);
+				}
+			}
 
-  /**
-   * Computes all the word prefixes for a given item which satisfy the
-   * min-complete requirement and are not in the stop-words array.
-   *
-   * @param   array $item
-   * @return  array
-   */
-  protected function prefixes($item) {
-    return Str::prefixesForPhrase($this->itemPhrase($item), $this->getMinComplete(), $this->getStopWords());
-  }
+			$this->redis()
+				 ->exec();
+		}
 
-  /**
-   * Computes the full-phrase for the given item taking into account its
-   * term + aliases (if provided).
-   *
-   * @param   array $item
-   * @return  string
-   */
-  protected function itemPhrase($item) {
-    $phrase = [$item['term']];
+		/**
+		 *
+		 * Removes the supplied item from Redis.
+		 * It only cares about an item's id, but for consistency takes an array
+		 *
+		 * @param   array $item
+		 *
+		 * @return  void
+		 *
+		 */
+		public function remove( array $item )
+		{
+			$stored = $this->redis()
+						   ->hget(
+							   $this->getDataPrefix(),
+							   $item[ 'id' ]
+						   );
 
-    if ( isset($item['aliases']) )
-      $phrase = array_merge($phrase, $item['aliases']);
+			if ( is_null( $stored ) ) return;
 
-    return implode(' ', $phrase);
-  }
+			$item = json_decode(
+				$stored,
+				TRUE
+			);
 
-}
+			/** @noinspection PhpMethodParametersCountMismatchInspection */
+			/** @noinspection PhpInternalEntityUsedInspection */
+			$this->redis()
+				 ->multi(
+					 Redis::PIPELINE
+				 );
+
+			$this->redis()->hdel(
+				$this->getDataPrefix(),
+				$item[ 'id' ]
+			);
+
+			$prefixes = $this->prefixes( $item );
+
+			if ( count( $prefixes ) > 0 )
+			{
+				// remove from master set
+				$this->redis()->srem(
+					$this->getIndexPrefix(),
+					...$prefixes
+				);
+
+				// undo the add operations
+				foreach ( $prefixes as $p )
+				{
+					// remove from master set
+					$this->redis()->zrem(
+						"{$this->getIndexPrefix()}:{$p}",
+						$item[ 'score' ]
+					);
+				}
+			}
+
+			$this->redis()
+				 ->exec();
+		}
+
+		/**
+		 *
+		 * Computes all the word prefixes for a given item which satisfy the
+		 * min-complete requirement and are not in the stop-words array.
+		 *
+		 * @param   array $item
+		 *
+		 * @return  array
+		 *
+		 */
+		protected function prefixes( $item )
+		{
+			return Str::prefixesForPhrase(
+				$this->itemPhrase( $item ),
+				$this->getMinComplete(),
+				$this->getStopWords()
+			);
+		}
+
+		/**
+		 *
+		 * Computes the full-phrase for the given item taking into account its
+		 * term + aliases (if provided).
+		 *
+		 * @param   array $item
+		 *
+		 * @return  string
+		 *
+		 */
+		protected function itemPhrase( $item )
+		{
+			$phrase = [ $item[ 'term' ] ];
+
+			if ( isset( $item[ 'aliases' ] ) )
+				$phrase = array_merge(
+					$phrase,
+					$item[ 'aliases' ]
+				);
+
+			return implode(
+				' ',
+				$phrase
+			);
+		}
+	}

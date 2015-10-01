@@ -1,75 +1,116 @@
 <?php
-namespace Compleet\Support\Traits;
+	namespace Compleeted\Support\Traits;
 
-use Predis\Client;
+	use Redis;
 
-trait RedisConnectionManager {
+	trait RedisConnectionManager
+	{
 
-  /**
-   * The redis client instance
-   *
-   * @var Predis\Client
-   */
-  protected $redis = null;
+		/**
+		 *
+		 * The redis client instance
+		 *
+		 * @var Redis
+		 *
+		 */
+		protected $redis = NULL;
 
-  /**
-   * Redis connection parameters.
-   *
-   * @var array|string
-   */
-  protected $parameters = null;
+		/**
+		 *
+		 * Redis connection parameters.
+		 *
+		 * @var array
+		 *
+		 */
+		protected $parameters = NULL;
 
-  /**
-   * Sets and resolves a new connection to redis. It accepts a previously
-   * instatiated Predis\Client or anything that the Predis\Client constructor
-   * deals with: A parameters array or a connection string.
-   *
-   * @param   mixed   $client
-   * @return  Predis\Client
-   */
-  public function setConnection($client) {
-    if ( is_string($client) || is_array($client) ) {
-      $this->redis = null;
-      $this->parameters = $client;
-    } else {
-      $this->redis = $client;
-    }
+		/**
+		 *
+		 * Redis connection parameters.
+		 *
+		 * @var integer
+		 *
+		 */
+		protected $database = NULL;
 
-    return $this->resolveConnection();
-  }
+		/**
+		 *
+		 * Sets and resolves a new connection to redis. It accepts a previously
+		 * instantiated Redis or anything that the Redis constructor
+		 * deals with: A parameters array or a connection string.
+		 *
+		 * @param   mixed $client
+		 *
+		 * @return  Redis
+		 *
+		 */
+		public function setConnection( $client )
+		{
+			if ( is_string( $client ) || is_array( $client ) )
+			{
+				$this->redis = NULL;
+				$this->parameters = $client;
+			}
+			else
+			{
+				$this->redis = $client;
+			}
 
-  /**
-   * Returns the current connection instance in use.
-   *
-   * @return Predis\Client;
-   */
-  public function getConnection() {
-    return $this->redis;
-  }
+			return $this->resolveConnection();
+		}
 
-  /**
-   * Returns the current connection instance or instatiates a new one from
-   * the provided parameters, the environment or localhost.
-   *
-   * @return Predis\Client
-   */
-  public function resolveConnection() {
-    if ( !is_null($this->redis) ) return $this->redis;
+		/**
+		 *
+		 * Returns the current connection instance in use.
+		 *
+		 * @return Redis;
+		 *
+		 */
+		public function getConnection()
+		{
+			return $this->redis;
+		}
 
-    $parameters = $this->parameters ?: getenv('REDIS_URL') ?: 'tcp://127.0.0.1/6379?database=0';
+		/**
+		 *
+		 * Returns the current connection instance or instantiates a new one from
+		 * the provided parameters or localhost defaults.
+		 *
+		 * @return Redis
+		 *
+		 */
+		public function resolveConnection()
+		{
+			if ( ! is_null( $this->redis ) ) return $this->redis;
 
-    $this->redis = new Client($parameters);
+			$parameters = $this->parameters ?: [
+				'127.0.0.1',
+				6379
+			];
 
-    return $this->redis;
-  }
+			$database = $this->database ?: 0;
 
-  /**
-   * Alias for `resolveConnection()`.
-   *
-   * @return Predis\Client
-   */
-  public function redis() {
-    return $this->resolveConnection();
-  }
+			$this->redis = new Redis();
 
-}
+			$this->redis->pconnect(
+				...
+				$parameters
+			);
+
+			$this->redis->select( $database );
+
+			return $this->redis;
+		}
+
+		/**
+		 *
+		 * Alias for `resolveConnection()`.
+		 *
+		 * @return Redis
+		 *
+		 */
+		public function redis()
+		{
+			return $this->resolveConnection();
+		}
+	}
